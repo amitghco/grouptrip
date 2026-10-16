@@ -37,7 +37,6 @@ function ItineraryRow({ label, itinerary }: { label: string; itinerary: FlightIt
 }
 
 export function FlightOfferCard({ offer }: { offer: FlightOffer }) {
-  const { adults, children } = offer.passengers;
   return (
     <article
       aria-label={`${offer.airline.name} to ${airportLabel(offer.destination)}`}
@@ -57,7 +56,7 @@ export function FlightOfferCard({ offer }: { offer: FlightOffer }) {
             Return total
             <span className="block sm:inline">
               <span className="hidden sm:inline"> · </span>
-              {formatPassengers(adults, children)}
+              {formatPassengers(offer.passengers)}
             </span>
           </p>
           {offer.source === "mock" && (

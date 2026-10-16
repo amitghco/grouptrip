@@ -1,4 +1,5 @@
 import { getAirport } from "../airports";
+import { localToUtc, utcToLocal } from "../time";
 import type {
   AirportCode,
   FlightItinerary,
@@ -10,6 +11,8 @@ import { genericRouteProfile, MOCK_ROUTES, type MockRouteOption } from "./mock-r
 import { createRandom, hashString } from "./random";
 
 export const CHILD_FARE_RATIO = 0.75;
+/** Lap infants typically pay a small fraction of the adult fare plus taxes. */
+export const INFANT_FARE_RATIO = 0.1;
 const DEPARTURE_SLOTS = ["06:00", "07:30", "09:15", "10:40", "12:05", "14:20", "16:45", "19:10", "21:30", "23:55"];
 
 export interface MockFlightProviderOptions {
@@ -44,8 +47,9 @@ export class MockFlightProvider implements FlightProvider {
     return profile.options.map((option, index) => {
       const jitter = 0.9 + random() * 0.25;
       const adultFare = profile.baseAdultFare * option.fareFactor * seasonFactor * jitter;
-      const { adults, children } = criteria.passengers;
-      const total = adultFare * adults + adultFare * CHILD_FARE_RATIO * children;
+      const { adults, childAges, infants } = criteria.passengers;
+      const total =
+        adultFare * (adults + childAges.length * CHILD_FARE_RATIO + infants * INFANT_FARE_RATIO);
 
       return {
         id: `mock-${destination}-${criteria.departureDate}-${criteria.returnDate}-${index}`,
@@ -55,7 +59,7 @@ export class MockFlightProvider implements FlightProvider {
         airline: option.airline,
         outbound: buildItinerary(criteria.origin, destination, criteria.departureDate, option, random),
         inbound: buildItinerary(destination, criteria.origin, criteria.returnDate, reverse(option), random),
-        passengers: { adults, children },
+        passengers: { adults, childAges: [...childAges], infants },
         totalPrice: { amount: Math.round(total), currency: "AUD" },
       };
     });
@@ -81,8 +85,10 @@ function buildItinerary(
   const slot = DEPARTURE_SLOTS[Math.floor(random() * DEPARTURE_SLOTS.length)];
   const durationMinutes = option.durationMinutes + Math.round((random() - 0.5) * 4) * 10;
   const departureAt = `${date}T${slot}`;
-  const offsetMinutes = (utcOffset(to, from) - utcOffset(from, from)) * 60;
-  const arrivalAt = addMinutes(departureAt, durationMinutes + offsetMinutes);
+  const arrivalAt = utcToLocal(
+    localToUtc(departureAt, timeZone(from, to)) + durationMinutes * 60_000,
+    timeZone(to, from),
+  );
   const segments = option.stopovers.length + 1;
   const flightNumbers = Array.from(
     { length: segments },
@@ -101,12 +107,7 @@ function buildItinerary(
   };
 }
 
-/** Unknown airports fall back to the reference airport's offset. */
-function utcOffset(code: AirportCode, fallback: AirportCode): number {
-  return getAirport(code)?.utcOffsetHours ?? getAirport(fallback)?.utcOffsetHours ?? 10;
-}
-
-function addMinutes(isoLocal: string, minutes: number): string {
-  const time = Date.parse(`${isoLocal}:00Z`) + minutes * 60_000;
-  return new Date(time).toISOString().slice(0, 16);
+/** Unknown airports fall back to the other end's time zone. */
+function timeZone(code: AirportCode, fallback: AirportCode): string {
+  return getAirport(code)?.timeZone ?? getAirport(fallback)?.timeZone ?? "Australia/Sydney";
 }

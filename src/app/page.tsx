@@ -10,8 +10,8 @@ export default function HomePage() {
           GroupTrip – Holiday Flight Finder
         </h1>
         <p className="mt-2 max-w-2xl text-slate-600">
-          Compare return flights from Sydney for the whole group — Bali, Vietnam, New Zealand or anywhere else
-          with an airport code — and see the total price for every passenger at a glance.
+          Compare return flights from Sydney for your family — Bali, Vietnam, New Zealand and more — and see
+          the total return price for your travellers at a glance. Each family in the group runs its own search.
         </p>
       </section>
 

@@ -1,11 +1,26 @@
+import { isKnownAirport } from "./airports";
 import type { FlightSearchCriteria } from "./types";
 
+const DEFAULT_MAX_DAYS_AHEAD = 365;
+
+/**
+ * How far ahead travel can be searched. Configurable so it can match the live provider's
+ * booking window (NEXT_PUBLIC_ so the browser-side validation uses the same value).
+ */
+export function resolveMaxDaysAhead(value: string | undefined): number {
+  const days = Number(value);
+  return value && Number.isInteger(days) && days >= 1 && days <= 730 ? days : DEFAULT_MAX_DAYS_AHEAD;
+}
+
 export const LIMITS = {
-  maxPassengers: 9,
+  /** Seated travellers (adults + children); infants on laps are not counted. */
+  maxSeatedPassengers: 9,
   minAdults: 1,
+  minChildAge: 2,
+  maxChildAge: 11,
   maxDestinations: 8,
   maxBudget: 1_000_000,
-  maxDaysAhead: 365,
+  maxDaysAhead: resolveMaxDaysAhead(process.env.NEXT_PUBLIC_MAX_DAYS_AHEAD),
 } as const;
 
 export type SearchField =
@@ -14,10 +29,13 @@ export type SearchField =
   | "departureDate"
   | "returnDate"
   | "adults"
-  | "children"
+  | "childAges"
+  | "infants"
   | "maxBudget";
 
 export type FieldErrors = Partial<Record<SearchField, string>>;
+
+type RawValue = string | number | null | undefined;
 
 /** Loosely-typed input as it arrives from a form or URL query string. */
 export interface RawSearchInput {
@@ -25,9 +43,11 @@ export interface RawSearchInput {
   destinations?: string | string[] | null;
   departureDate?: string | null;
   returnDate?: string | null;
-  adults?: string | number | null;
-  children?: string | number | null;
-  maxBudget?: string | number | null;
+  adults?: RawValue;
+  /** Comma-separated ages or a list; blank entries mean "age not selected". */
+  childAges?: string | RawValue[] | null;
+  infants?: RawValue;
+  maxBudget?: RawValue;
 }
 
 export type ValidationResult =
@@ -68,7 +88,12 @@ export function todayIso(timeZone = "Australia/Sydney", now: Date = new Date()):
   }).format(now);
 }
 
-function parseCount(value: RawSearchInput["adults"]): number | null {
+/** Last searchable travel date (YYYY-MM-DD) for the given "today". */
+export function latestTravelDate(today: string = todayIso(), maxDaysAhead: number = LIMITS.maxDaysAhead): string {
+  return new Date(parseIsoDate(today)! + maxDaysAhead * DAY_MS).toISOString().slice(0, 10);
+}
+
+function parseCount(value: RawValue): number | null {
   if (value === undefined || value === null || value === "") return null;
   const num = typeof value === "number" ? value : Number(value);
   return Number.isInteger(num) ? num : NaN;
@@ -81,9 +106,22 @@ function toDestinationList(value: RawSearchInput["destinations"]): string[] {
   return Array.from(new Set(codes));
 }
 
+function toAgeList(value: RawSearchInput["childAges"]): (number | null)[] {
+  if (value === undefined || value === null || value === "") return [];
+  const parts = Array.isArray(value) ? value : value.split(",");
+  return parts.map((part) => parseCount(typeof part === "string" ? part.trim() : part));
+}
+
+function airportError(code: string, label: string): string | undefined {
+  if (!IATA_PATTERN.test(code)) return `Use a 3-letter IATA airport code for the ${label}, e.g. SYD.`;
+  if (!isKnownAirport(code)) return `${code} isn't in GroupTrip's airport list. Pick a suggested airport or check the code.`;
+  return undefined;
+}
+
 export interface ValidateOptions {
   /** Override "today" (YYYY-MM-DD) for deterministic tests. */
   today?: string;
+  maxDaysAhead?: number;
 }
 
 export function validateSearchInput(
@@ -94,22 +132,27 @@ export function validateSearchInput(
 
   const origin = normalizeIata(input.origin ?? "");
   if (!origin) errors.origin = "Departure airport is required.";
-  else if (!IATA_PATTERN.test(origin)) errors.origin = "Use a 3-letter IATA airport code, e.g. SYD.";
+  else errors.origin = airportError(origin, "departure airport");
 
   const destinations = toDestinationList(input.destinations);
-  const invalidDestinations = destinations.filter((code) => !IATA_PATTERN.test(code));
+  const invalidFormat = destinations.filter((code) => !IATA_PATTERN.test(code));
+  const unknown = destinations.filter((code) => IATA_PATTERN.test(code) && !isKnownAirport(code));
   if (destinations.length === 0) {
     errors.destinations = "Choose at least one destination.";
-  } else if (invalidDestinations.length > 0) {
-    errors.destinations = `Invalid airport code: ${invalidDestinations.join(", ")}.`;
+  } else if (invalidFormat.length > 0) {
+    errors.destinations = `Invalid airport code: ${invalidFormat.join(", ")}.`;
+  } else if (unknown.length > 0) {
+    errors.destinations = `Unknown airport code: ${unknown.join(", ")}. Pick a suggested airport or check the code.`;
   } else if (destinations.length > LIMITS.maxDestinations) {
     errors.destinations = `Choose up to ${LIMITS.maxDestinations} destinations.`;
   } else if (!errors.origin && destinations.includes(origin)) {
     errors.destinations = "Destination must differ from the departure airport.";
   }
 
+  const maxDaysAhead = options.maxDaysAhead ?? LIMITS.maxDaysAhead;
   const today = options.today ?? todayIso();
   const todayTime = parseIsoDate(today)!;
+  const latestTime = todayTime + maxDaysAhead * DAY_MS;
   const departureDate = (input.departureDate ?? "").trim();
   const returnDate = (input.returnDate ?? "").trim();
   const departureTime = parseIsoDate(departureDate);
@@ -118,23 +161,36 @@ export function validateSearchInput(
   if (!departureDate) errors.departureDate = "Departure date is required.";
   else if (departureTime === null) errors.departureDate = "Enter a valid departure date.";
   else if (departureTime < todayTime) errors.departureDate = "Departure date cannot be in the past.";
-  else if (departureTime > todayTime + LIMITS.maxDaysAhead * DAY_MS)
-    errors.departureDate = `Departure must be within ${LIMITS.maxDaysAhead} days.`;
+  else if (departureTime > latestTime) errors.departureDate = `Departure must be within ${maxDaysAhead} days.`;
 
   if (!returnDate) errors.returnDate = "Return date is required.";
   else if (returnTime === null) errors.returnDate = "Enter a valid return date.";
   else if (departureTime !== null && returnTime <= departureTime)
     errors.returnDate = "Return date must be after the departure date.";
-  else if (returnTime > todayTime + LIMITS.maxDaysAhead * DAY_MS)
-    errors.returnDate = `Return must be within ${LIMITS.maxDaysAhead} days.`;
+  else if (returnTime > latestTime) errors.returnDate = `Return must be within ${maxDaysAhead} days.`;
 
   const adults = parseCount(input.adults) ?? 1;
-  const children = parseCount(input.children) ?? 0;
-  if (Number.isNaN(adults) || adults < LIMITS.minAdults)
-    errors.adults = "At least 1 adult is required.";
-  if (Number.isNaN(children) || children < 0) errors.children = "Children cannot be negative.";
-  if (!errors.adults && !errors.children && adults + children > LIMITS.maxPassengers)
-    errors.children = `Maximum ${LIMITS.maxPassengers} passengers per search.`;
+  if (Number.isNaN(adults) || adults < LIMITS.minAdults) errors.adults = "At least 1 adult is required.";
+
+  const rawAges = toAgeList(input.childAges);
+  if (rawAges.some((age) => age === null)) {
+    errors.childAges = "Select an age for each child.";
+  } else if (
+    rawAges.some((age) => Number.isNaN(age) || age! < LIMITS.minChildAge || age! > LIMITS.maxChildAge)
+  ) {
+    errors.childAges = `Children must be aged ${LIMITS.minChildAge}–${LIMITS.maxChildAge}. Add under-2s as infants and 12+ as adults.`;
+  }
+  const childAges = rawAges as number[];
+
+  if (!errors.adults && adults + childAges.length > LIMITS.maxSeatedPassengers) {
+    const field = childAges.length > 0 ? "childAges" : "adults";
+    errors[field] ??= `Maximum ${LIMITS.maxSeatedPassengers} adults and children per search.`;
+  }
+
+  const infants = parseCount(input.infants) ?? 0;
+  if (Number.isNaN(infants) || infants < 0) errors.infants = "Infants cannot be negative.";
+  else if (!errors.adults && infants > adults)
+    errors.infants = "Each infant must travel on an adult's lap (one infant per adult).";
 
   let maxBudget: number | undefined;
   if (input.maxBudget !== undefined && input.maxBudget !== null && input.maxBudget !== "") {
@@ -144,7 +200,10 @@ export function validateSearchInput(
     else maxBudget = Math.round(budget * 100) / 100;
   }
 
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const fieldErrors = Object.fromEntries(
+    Object.entries(errors).filter(([, message]) => message !== undefined),
+  ) as FieldErrors;
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, errors: fieldErrors };
 
   return {
     ok: true,
@@ -153,7 +212,7 @@ export function validateSearchInput(
       destinations,
       departureDate,
       returnDate,
-      passengers: { adults, children },
+      passengers: { adults, childAges, infants },
       ...(maxBudget !== undefined ? { maxBudget } : {}),
     },
   };

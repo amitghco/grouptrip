@@ -8,11 +8,12 @@ A personal, mobile-friendly web app for comparing return flights from Sydney for
 
 ## Features
 
-- Search form: departure airport (default `SYD`), departure/return dates, adults & children, optional
-  maximum total budget (AUD, all passengers), destinations `DPS`, `AKL`, `ZQN`, `SGN`, `DAD` plus any
-  other IATA code.
-- Comparison results: total return price for all passengers, airline, duration, stops (with
-  stopovers), dates/times and destination; a "cheapest by destination" summary.
+- Search form: departure airport (default `SYD`), departure/return dates, one family's travellers
+  (adults 12+, children 2–11 with individual ages, lap infants under 2), an optional **per-family**
+  budget (AUD), destinations `DPS`, `AKL`, `ZQN`, `SGN`, `DAD` plus any other airport from the
+  built-in reference list (with autocomplete).
+- Comparison results: total return price for the family's travellers, airline, duration, stops
+  (with stopovers), dates/times and destination; a "cheapest by destination" summary.
 - Sort by lowest price, shortest duration or fewest stops; filter by destination and stops.
 - Loading, empty, error (with retry) and invalid-search states.
 - Mock data is clearly labelled in the header, on every page, on every fare card and in the API
@@ -48,6 +49,7 @@ See [`.env.example`](.env.example).
 | ----------------- | ------- | -------------------------------------------------------------- |
 | `FLIGHT_PROVIDER` | `mock`  | Flight data provider. Only `mock` is implemented.              |
 | `MOCK_LATENCY_MS` | `400`   | Artificial delay for the mock provider (shows loading state).  |
+| `NEXT_PUBLIC_MAX_DAYS_AHEAD` | `365` | How far ahead travel can be searched (1–730). Used by browser and server validation; set at build time. |
 
 ## Architecture
 
@@ -66,7 +68,9 @@ src/
       offers.ts                  Sorting, filtering, per-destination summaries
       service.ts                 FlightSearchService + provider factory (FLIGHT_PROVIDER)
       providers/mock-provider.ts Deterministic mock provider
-      format.ts, airports.ts     Formatting helpers, airport metadata
+      airport-data.ts            Reference list of accepted airports (code, city, country, IANA time zone)
+      airports.ts, time.ts       Airport lookup; DST-aware local/UTC time conversion
+      format.ts                  Formatting helpers
     search-form.ts               Form defaults and URL pre-fill
 ```
 
@@ -87,9 +91,19 @@ server-side (the API route), so they are never exposed to the browser. UI code d
   PostCSS has open security advisories.
 - **Search criteria live in the URL**, so results are shareable/bookmarkable and "Modify search"
   restores the form.
-- **Budget = total return price for the whole group**, matching how results are compared.
+- **One search per family.** The friends group is several families who book separately, so the
+  passengers and budget describe a single family and the budget is that family's maximum total
+  return price. Each family runs its own search (or shares a results link and tweaks travellers).
+- **Passenger model mirrors airline/Amadeus age bands:** adults 12+, children 2–11 (each child's age
+  is captured), lap infants under 2 (max one per adult). The 9-traveller limit counts seated
+  travellers only (adults + children), as Amadeus does.
+- **Airport codes are checked against a curated reference list** (`airport-data.ts`, ~100 airports
+  relevant to trips from Australia plus major hubs). Unknown codes are rejected with a clear
+  message instead of returning invented results.
 - **Mock provider is deterministic** (seeded by route + dates) so results are stable between reloads
-  and tests. Children are priced at 75% of the adult fare; Friday/Saturday travel costs slightly more.
+  and tests. Children are priced at 75% and lap infants at 10% of the adult fare; Friday/Saturday
+  travel costs slightly more. Arrival times use real IANA time zones, so daylight saving (e.g.
+  Sydney and Auckland on 4 April 2027) is reflected.
 - **No runtime dependencies** beyond Next.js/React; validation is hand-written and unit tested.
 - **System fonts** instead of `next/font/google`, so builds don't depend on Google Fonts.
 
@@ -97,9 +111,14 @@ server-side (the API route), so they are never exposed to the browser. UI code d
 
 - All fares, airlines, flight numbers, times and durations are illustrative mock data.
 - Mock routes are modelled for departures from Sydney; other origins reuse the same profiles.
-- Unknown IATA codes get generic generated offers; codes are format-checked, not looked up.
-- Max 9 passengers per search (Amadeus limit); infants, cabin class and one-way trips are not supported.
-- Arrival times use fixed approximate April UTC offsets.
+- Destinations without a hand-written mock route get generic generated offers.
+- The airport list is curated, not exhaustive; Task 2 should validate against the provider's airport
+  search (keeping the list as an offline fallback).
+- The 365-day window is a default; align `NEXT_PUBLIC_MAX_DAYS_AHEAD` with the live provider's booking
+  window. Flexible-date (± days) search is not supported yet.
+- Child ages are captured but the mock prices all children 2–11 the same; seated infants, cabin
+  class and one-way trips are not supported. Max 9 seated travellers per search.
+- Mock fares use simplified pricing; live fares must use provider-supplied prices and times.
 - Hyams Beach / Jervis Bay are drive-to destinations and are not included in flight search.
 - No database, authentication, saved searches or booking.
 

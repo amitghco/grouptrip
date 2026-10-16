@@ -20,9 +20,16 @@ export interface Airline {
   name: string;
 }
 
+/**
+ * Travellers in one family's search. Age bands follow airline conventions
+ * (Amadeus: ADULT 12+, CHILD 2–11, HELD_INFANT under 2 on an adult's lap).
+ */
 export interface PassengerCounts {
   adults: number;
-  children: number;
+  /** Age (2–11) of each child on the travel date. */
+  childAges: number[];
+  /** Infants under 2 travelling on an adult's lap (at most one per adult). */
+  infants: number;
 }
 
 export interface FlightSearchCriteria {
@@ -33,7 +40,7 @@ export interface FlightSearchCriteria {
   /** ISO date, YYYY-MM-DD */
   returnDate: string;
   passengers: PassengerCounts;
-  /** Optional maximum total price for all passengers, in AUD. */
+  /** Optional per-family budget: maximum total return price for these travellers, in AUD. */
   maxBudget?: number;
 }
 
@@ -61,7 +68,7 @@ export interface FlightOffer {
   outbound: FlightItinerary;
   inbound: FlightItinerary;
   passengers: PassengerCounts;
-  /** Total return price for all passengers. */
+  /** Total return price for all travellers in the search (one family). */
   totalPrice: Money;
 }
 

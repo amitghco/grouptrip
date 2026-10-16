@@ -33,7 +33,7 @@ describe("SearchForm", () => {
     await user.click(screen.getByRole("button", { name: /\(AKL\)/ }));
     await user.type(screen.getByLabelText("Other destination IATA code"), "nan{Enter}");
     await user.click(screen.getByRole("button", { name: "Increase adults" }));
-    await user.type(screen.getByLabelText(/Max budget/), "9000");
+    await user.type(screen.getByLabelText(/Family budget/), "9000");
     await user.click(screen.getByRole("button", { name: "Search Flights" }));
 
     expect(push).toHaveBeenCalledTimes(1);
@@ -45,7 +45,6 @@ describe("SearchForm", () => {
       departureDate: initialValues.departureDate,
       returnDate: initialValues.returnDate,
       adults: "3",
-      children: "2",
       maxBudget: "9000",
     });
   });
@@ -70,5 +69,37 @@ describe("SearchForm", () => {
     await user.type(screen.getByLabelText("Other destination IATA code"), "N1");
     await user.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByText(/Enter a 3-letter IATA code/)).toBeInTheDocument();
+  });
+
+  it("rejects a well-formed code that isn't a known airport", async () => {
+    const user = userEvent.setup();
+    render(<SearchForm initialValues={initialValues} />);
+    await user.type(screen.getByLabelText("Other destination IATA code"), "XYZ{Enter}");
+    expect(screen.getByText(/XYZ isn't in GroupTrip's airport list/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove XYZ" })).not.toBeInTheDocument();
+  });
+
+  it("collects child ages and lap infants", async () => {
+    const user = userEvent.setup();
+    render(<SearchForm initialValues={initialValues} />);
+    await user.click(screen.getByRole("button", { name: "Increase children" }));
+    await user.click(screen.getByRole("button", { name: "Increase children" }));
+    await user.click(screen.getByRole("button", { name: "Search Flights" }));
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText("Select an age for each child.")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Child 1 age"), "4");
+    await user.selectOptions(screen.getByLabelText("Child 2 age"), "9");
+    await user.click(screen.getByRole("button", { name: "Increase infants" }));
+    await user.click(screen.getByRole("button", { name: "Increase infants" }));
+    expect(screen.getByRole("button", { name: "Increase infants" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Decrease adults" }));
+    expect(screen.getByLabelText("Infants")).toHaveValue(1);
+    await user.click(screen.getByRole("button", { name: "Search Flights" }));
+
+    const url = new URL(push.mock.calls[0][0], "http://localhost");
+    expect(url.searchParams.get("adults")).toBe("1");
+    expect(url.searchParams.get("childAges")).toBe("4,9");
+    expect(url.searchParams.get("infants")).toBe("1");
   });
 });

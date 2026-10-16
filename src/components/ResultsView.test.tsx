@@ -14,7 +14,7 @@ const criteria = {
   destinations: ["DPS", "AKL"],
   departureDate: isoDaysFromToday(30),
   returnDate: isoDaysFromToday(40),
-  passengers: { adults: 2, children: 2 },
+  passengers: { adults: 2, childAges: [5, 8], infants: 0 },
 };
 
 const result: FlightSearchResult = {
@@ -94,7 +94,7 @@ describe("ResultsView", () => {
     mockFetch(200, { ...result, offers: [] });
     render(<ResultsView />);
     expect(await screen.findByText("No flights found")).toBeInTheDocument();
-    expect(screen.getByText(/fit your budget/)).toBeInTheDocument();
+    expect(screen.getByText(/fit your family budget/)).toBeInTheDocument();
   });
 
   it("shows an error state with retry when the API fails", async () => {

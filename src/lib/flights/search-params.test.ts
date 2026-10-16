@@ -9,7 +9,7 @@ const criteria: FlightSearchCriteria = {
   destinations: ["DPS", "NAN"],
   departureDate: "2027-04-10",
   returnDate: "2027-04-20",
-  passengers: { adults: 4, children: 3 },
+  passengers: { adults: 4, childAges: [3, 6, 10], infants: 1 },
   maxBudget: 12000,
 };
 
@@ -33,7 +33,8 @@ describe("search params", () => {
       departureDate: "2027-04-10",
       returnDate: "2027-04-20",
       adults: 4,
-      children: 3,
+      childAges: [3, 6, 10],
+      infants: 1,
       maxBudget: "12000",
     });
     expect(formValuesFromSearchParams(new URLSearchParams("adults=x"))).toEqual(DEFAULT_FORM_VALUES);

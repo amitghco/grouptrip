@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { airportLabel, SUGGESTED_DESTINATIONS } from "@/lib/flights/airports";
+import { airportLabel, isKnownAirport, SUGGESTED_DESTINATIONS } from "@/lib/flights/airports";
 import { isValidIata, normalizeIata } from "@/lib/flights/validation";
 
 interface DestinationPickerProps {
   selected: string[];
   error?: string;
+  /** Optional <datalist> id providing airport suggestions. */
+  datalistId?: string;
   onChange: (destinations: string[]) => void;
 }
 
-export function DestinationPicker({ selected, error, onChange }: DestinationPickerProps) {
+export function DestinationPicker({ selected, error, datalistId, onChange }: DestinationPickerProps) {
   const [customCode, setCustomCode] = useState("");
   const [customError, setCustomError] = useState<string>();
   const customSelected = selected.filter((code) => !SUGGESTED_DESTINATIONS.includes(code));
@@ -22,6 +24,10 @@ export function DestinationPicker({ selected, error, onChange }: DestinationPick
     const code = normalizeIata(customCode);
     if (!isValidIata(code)) {
       setCustomError("Enter a 3-letter IATA code, e.g. NAN.");
+      return;
+    }
+    if (!isKnownAirport(code)) {
+      setCustomError(`${code} isn't in GroupTrip's airport list. Start typing to see suggestions.`);
       return;
     }
     setCustomError(undefined);
@@ -78,6 +84,8 @@ export function DestinationPicker({ selected, error, onChange }: DestinationPick
             id="custom-destination"
             value={customCode}
             maxLength={3}
+            list={datalistId}
+            autoComplete="off"
             placeholder="Other IATA code"
             autoCapitalize="characters"
             aria-invalid={Boolean(customError)}

@@ -9,7 +9,7 @@ const criteria: FlightSearchCriteria = {
   destinations: ["DPS"],
   departureDate: "2027-04-10",
   returnDate: "2027-04-20",
-  passengers: { adults: 2, children: 2 },
+  passengers: { adults: 2, childAges: [5, 8], infants: 0 },
 };
 
 const stubProvider: FlightProvider = {

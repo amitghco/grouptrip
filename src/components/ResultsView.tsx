@@ -89,9 +89,9 @@ export function ResultsView() {
           <h1 className="text-2xl font-bold text-slate-900">Return flights from {criteria.origin}</h1>
           <p className="text-sm text-slate-600">
             {formatDate(criteria.departureDate)} – {formatDate(criteria.returnDate)} ·{" "}
-            {formatPassengers(criteria.passengers.adults, criteria.passengers.children)}
+            {formatPassengers(criteria.passengers)}
             {criteria.maxBudget !== undefined &&
-              ` · Budget ${formatMoney({ amount: criteria.maxBudget, currency: "AUD" })}`}
+              ` · Family budget ${formatMoney({ amount: criteria.maxBudget, currency: "AUD" })}`}
           </p>
         </div>
         <Link href={modifyHref} className={linkButton}>
@@ -126,7 +126,7 @@ export function ResultsView() {
           }
         >
           {criteria.maxBudget !== undefined
-            ? "No options fit your budget. Try increasing it or changing dates."
+            ? "No options fit your family budget. Try increasing it or changing dates."
             : "No options were found for these destinations and dates."}
         </EmptyState>
       )}

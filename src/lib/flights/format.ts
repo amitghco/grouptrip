@@ -1,4 +1,4 @@
-import type { Money } from "./types";
+import type { Money, PassengerCounts } from "./types";
 
 export function formatMoney(money: Money): string {
   return new Intl.NumberFormat("en-AU", {
@@ -42,8 +42,17 @@ export function dayOffset(fromIsoLocal: string, toIsoLocal: string): number {
   return Math.round((to - from) / (24 * 60 * 60 * 1000));
 }
 
-export function formatPassengers(adults: number, children: number): string {
-  const parts = [`${adults} adult${adults === 1 ? "" : "s"}`];
-  if (children > 0) parts.push(`${children} child${children === 1 ? "" : "ren"}`);
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+/** e.g. "2 adults, 2 children (ages 4, 7), 1 infant" */
+export function formatPassengers({ adults, childAges, infants }: PassengerCounts): string {
+  const parts = [plural(adults, "adult")];
+  if (childAges.length > 0) {
+    const ages = childAges.length === 1 ? `age ${childAges[0]}` : `ages ${childAges.join(", ")}`;
+    parts.push(`${plural(childAges.length, "child", "children")} (${ages})`);
+  }
+  if (infants > 0) parts.push(plural(infants, "infant"));
   return parts.join(", ");
 }

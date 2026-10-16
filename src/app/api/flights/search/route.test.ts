@@ -19,7 +19,7 @@ describe("GET /api/flights/search", () => {
       departureDate: isoDaysFromToday(30),
       returnDate: isoDaysFromToday(40),
       adults: "2",
-      children: "1",
+      childAges: "6",
     }).toString();
 
   it("returns mock offers flagged as mock data", async () => {

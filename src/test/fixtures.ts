@@ -26,7 +26,7 @@ export function makeOffer(overrides: Partial<FlightOffer> & { id: string }): Fli
     airline: { code: "QF", name: "Qantas" },
     outbound: leg,
     inbound: { ...leg, from: "DPS", to: "SYD", departureAt: "2027-04-20T10:00", arrivalAt: "2027-04-20T20:20" },
-    passengers: { adults: 2, children: 2 },
+    passengers: { adults: 2, childAges: [5, 8], infants: 0 },
     totalPrice: { amount: 3000, currency: "AUD" },
     ...overrides,
   };

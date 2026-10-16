@@ -2,10 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { AIRPORT_DATALIST_ID, AirportDatalist } from "@/components/AirportDatalist";
+import { ChildAgeSelect } from "@/components/ChildAgeSelect";
 import { DestinationPicker } from "@/components/DestinationPicker";
 import { PassengerStepper } from "@/components/PassengerStepper";
 import { criteriaToSearchParams } from "@/lib/flights/search-params";
-import { LIMITS, validateSearchInput, type FieldErrors } from "@/lib/flights/validation";
+import {
+  latestTravelDate,
+  LIMITS,
+  todayIso,
+  validateSearchInput,
+  type FieldErrors,
+} from "@/lib/flights/validation";
 import { DEFAULT_FORM_VALUES, formValuesToRawInput, type SearchFormValues } from "@/lib/search-form";
 
 interface SearchFormProps {
@@ -32,6 +40,25 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
 
   const update = <K extends keyof SearchFormValues>(key: K, value: SearchFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
+
+  const setAdults = (adults: number) =>
+    setValues((current) => ({ ...current, adults, infants: Math.min(current.infants, adults) }));
+
+  const setChildCount = (count: number) =>
+    setValues((current) => ({
+      ...current,
+      childAges: Array.from({ length: count }, (_, i) => current.childAges[i] ?? null),
+    }));
+
+  const setChildAge = (index: number, age: number | null) =>
+    setValues((current) => ({
+      ...current,
+      childAges: current.childAges.map((existing, i) => (i === index ? age : existing)),
+    }));
+
+  const today = todayIso();
+  const latestDate = latestTravelDate(today);
+  const seatsLeft = LIMITS.maxSeatedPassengers - values.adults - values.childAges.length;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -64,6 +91,8 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
             id="origin"
             value={values.origin}
             maxLength={3}
+            list={AIRPORT_DATALIST_ID}
+            autoComplete="off"
             autoCapitalize="characters"
             aria-invalid={Boolean(errors.origin)}
             aria-describedby={describedBy("origin")}
@@ -80,6 +109,8 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
             id="departureDate"
             type="date"
             value={values.departureDate}
+            min={today}
+            max={latestDate}
             aria-invalid={Boolean(errors.departureDate)}
             aria-describedby={describedBy("departureDate")}
             onChange={(event) => update("departureDate", event.target.value)}
@@ -95,7 +126,8 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
             id="returnDate"
             type="date"
             value={values.returnDate}
-            min={values.departureDate || undefined}
+            min={values.departureDate || today}
+            max={latestDate}
             aria-invalid={Boolean(errors.returnDate)}
             aria-describedby={describedBy("returnDate")}
             onChange={(event) => update("returnDate", event.target.value)}
@@ -105,32 +137,69 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <PassengerStepper
-          id="adults"
-          label="Adults"
-          hint="12 years and over"
-          value={values.adults}
-          min={LIMITS.minAdults}
-          max={LIMITS.maxPassengers}
-          error={errors.adults}
-          onChange={(value) => update("adults", value)}
-        />
-        <PassengerStepper
-          id="children"
-          label="Children"
-          hint="2–11 years"
-          value={values.children}
-          min={0}
-          max={LIMITS.maxPassengers - 1}
-          error={errors.children}
-          onChange={(value) => update("children", value)}
-        />
-        <div>
+      <p className="-mt-3 text-xs text-slate-500">
+        Travel dates can be up to {LIMITS.maxDaysAhead} days ahead.
+      </p>
+
+      <fieldset className="space-y-4 rounded-xl border border-slate-200 p-4">
+        <legend className="px-1 text-sm font-semibold text-slate-800">Your family&apos;s travellers</legend>
+        <p className="-mt-2 text-xs text-slate-500">
+          Search once per family: prices and the budget below cover only these travellers.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <PassengerStepper
+            id="adults"
+            label="Adults"
+            hint="12 years and over"
+            value={values.adults}
+            min={LIMITS.minAdults}
+            max={values.adults + seatsLeft}
+            error={errors.adults}
+            onChange={setAdults}
+          />
+          <PassengerStepper
+            id="children"
+            label="Children"
+            hint="2–11 years, own seat"
+            value={values.childAges.length}
+            min={0}
+            max={values.childAges.length + seatsLeft}
+            onChange={setChildCount}
+          />
+          <PassengerStepper
+            id="infants"
+            label="Infants"
+            hint="Under 2, on an adult's lap"
+            value={values.infants}
+            min={0}
+            max={values.adults}
+            error={errors.infants}
+            onChange={(infants) => update("infants", infants)}
+          />
+        </div>
+        {values.childAges.length > 0 && (
+          <div>
+            <div className="flex flex-wrap gap-3">
+              {values.childAges.map((age, index) => (
+                <ChildAgeSelect
+                  key={index}
+                  index={index}
+                  value={age}
+                  invalid={Boolean(errors.childAges)}
+                  onChange={(next) => setChildAge(index, next)}
+                />
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Age on the travel date.</p>
+          </div>
+        )}
+        <FieldError id="childAges-error" message={errors.childAges} />
+
+        <div className="sm:max-w-xs">
           <label htmlFor="maxBudget" className="block text-sm font-medium text-slate-700">
-            Max budget (AUD, optional)
+            Family budget (AUD, optional)
           </label>
-          <p className="text-xs text-slate-500">Total return price for all passengers</p>
+          <p className="text-xs text-slate-500">Max total return price for the travellers above</p>
           <div className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-3 mt-1 flex items-center text-slate-500">
               $
@@ -151,10 +220,11 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
           </div>
           <FieldError id="maxBudget-error" message={errors.maxBudget} />
         </div>
-      </div>
+      </fieldset>
 
       <DestinationPicker
         selected={values.destinations}
+        datalistId={AIRPORT_DATALIST_ID}
         error={errors.destinations}
         onChange={(destinations) => update("destinations", destinations)}
       />
@@ -172,6 +242,7 @@ export function SearchForm({ initialValues = DEFAULT_FORM_VALUES }: SearchFormPr
       >
         {submitting ? "Searching…" : "Search Flights"}
       </button>
+      <AirportDatalist />
     </form>
   );
 }

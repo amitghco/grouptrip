@@ -7,7 +7,9 @@ export interface SearchFormValues {
   departureDate: string;
   returnDate: string;
   adults: number;
-  children: number;
+  /** One entry per child; null until an age is selected. */
+  childAges: (number | null)[];
+  infants: number;
   /** Kept as a string so the input can be empty. */
   maxBudget: string;
 }
@@ -19,7 +21,8 @@ export const DEFAULT_FORM_VALUES: SearchFormValues = {
   departureDate: "2027-04-10",
   returnDate: "2027-04-20",
   adults: 2,
-  children: 2,
+  childAges: [],
+  infants: 0,
   maxBudget: "",
 };
 
@@ -30,7 +33,8 @@ export function formValuesToRawInput(values: SearchFormValues): RawSearchInput {
     departureDate: values.departureDate,
     returnDate: values.returnDate,
     adults: values.adults,
-    children: values.children,
+    childAges: values.childAges,
+    infants: values.infants,
     maxBudget: values.maxBudget.trim(),
   };
 }
@@ -38,6 +42,14 @@ export function formValuesToRawInput(values: SearchFormValues): RawSearchInput {
 function toCount(value: string | null, fallback: number): number {
   const num = Number(value);
   return value !== null && value !== "" && Number.isInteger(num) && num >= 0 ? num : fallback;
+}
+
+function toAges(value: string | null): (number | null)[] {
+  if (!value) return [];
+  return value.split(",").map((part) => {
+    const age = Number(part);
+    return part.trim() !== "" && Number.isInteger(age) ? age : null;
+  });
 }
 
 /** Pre-fills the form from a previous search URL (e.g. "Modify search"). */
@@ -56,7 +68,8 @@ export function formValuesFromSearchParams(
     departureDate: params.get("departureDate") || defaults.departureDate,
     returnDate: params.get("returnDate") || defaults.returnDate,
     adults: toCount(params.get("adults"), defaults.adults),
-    children: toCount(params.get("children"), defaults.children),
+    childAges: params.get("childAges") ? toAges(params.get("childAges")) : defaults.childAges,
+    infants: toCount(params.get("infants"), defaults.infants),
     maxBudget: params.get("maxBudget") ?? defaults.maxBudget,
   };
 }
